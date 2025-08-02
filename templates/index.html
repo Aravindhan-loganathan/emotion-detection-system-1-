@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Emotion Assistant</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Inter', sans-serif;
+    }
+    body {
+      background-color: #0e0e11;
+      color: #fff;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 25%;
+      background-color: #1a1a1d;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border-right: 2px solid #333;
+    }
+    .sidebar h2 {
+      color: #a66df2;
+      margin-bottom: 1.5rem;
+    }
+    .camera-box {
+      background-color: #2b2b30;
+      border-radius: 50%;
+      width: 160px;
+      height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+    .camera-box video,
+    .camera-box img {
+      width: 160px;
+      height: 160px;
+      object-fit: cover;
+    }
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: 100%;
+      align-items: center;
+    }
+    .btn {
+      background: linear-gradient(135deg, #a66df2, #d37bf6);
+      border: none;
+      padding: 0.8rem 1.2rem;
+      border-radius: 8px;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .chat-section {
+      width: 75%;
+      display: flex;
+      flex-direction: column;
+      padding: 2rem;
+    }
+    .chat-header {
+      font-size: 1.4rem;
+      color: #a66df2;
+      margin-bottom: 1rem;
+    }
+    .chat-box {
+      flex: 1;
+      background-color: #1e1e23;
+      border-radius: 10px;
+      padding: 1rem;
+      overflow-y: auto;
+      margin-bottom: 1rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .message {
+      padding: 0.75rem;
+      margin-bottom: 0.8rem;
+      border-radius: 10px;
+      max-width: 70%;
+    }
+    .bot {
+      background-color: #333;
+      align-self: flex-start;
+    }
+    .user {
+      background-color: #6a5acd;
+      align-self: flex-end;
+    }
+    .chat-input {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .chat-input input {
+      flex: 1;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 8px;
+      background-color: #2b2b30;
+      color: white;
+      outline: none;
+    }
+    .chat-input button {
+      background-color: #a66df2;
+      border: none;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>Emotion Detection</h2>
+  <div class="camera-box" id="cameraBox">
+    <video id="videoFeed" autoplay playsinline muted style="display:none;"></video>
+    <span id="cameraIcon">📸</span>
+  </div>
+
+  <div class="button-group">
+    <button class="btn" id="cameraToggleBtn">Enable Camera</button>
+    <button class="btn" onclick="detectEmotion()">Detect Emotion</button>
+  </div>
+</div>
+
+<div class="chat-section">
+  <div class="chat-header">Emotion-Aware Chat</div>
+  <div class="chat-box" id="chatBox">
+    <div class="message bot">Hi! I'm your emotion-aware assistant. Enable the camera and let’s begin.</div>
+  </div>
+  <div class="chat-input">
+    <input type="text" placeholder="Type your message..." id="chatInput">
+    <button onclick="sendMessage()">➤</button>
+  </div>
+</div>
+
+<script>
+let videoStream;
+const video = document.getElementById('videoFeed');
+
+document.getElementById('cameraToggleBtn').addEventListener('click', async function () {
+  const cameraIcon = document.getElementById('cameraIcon');
+
+  if (!videoStream) {
+    try {
+      videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = videoStream;
+      video.style.display = 'block';
+      cameraIcon.style.display = 'none';
+      this.textContent = 'Disable Camera';
+    } catch (err) {
+      alert('Unable to access camera');
+    }
+  } else {
+    videoStream.getTracks().forEach(track => track.stop());
+    videoStream = null;
+    video.style.display = 'none';
+    cameraIcon.style.display = 'inline';
+    this.textContent = 'Enable Camera';
+  }
+});
+
+function captureFrame() {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const context = canvas.getContext('2d');
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg');
+}
+
+function detectEmotion() {
+  if (!videoStream) {
+    appendMessage("🔒 Please enable the camera first to detect your emotion.", 'bot');
+    return;
+  }
+
+  const imageData = captureFrame();
+
+  fetch('http://127.0.0.1:5000/detect_emotion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: imageData })
+  })
+    .then(res => res.json())
+    .then(data => {
+      const emotion = data.emotion;
+
+      if (emotion === "No Face Detected") {
+        appendMessage("😕 I couldn't detect your face. Please adjust your position and try again.", 'bot');
+        return;
+      }
+
+      // Emotion-specific responses
+      const responses = {
+        Angry: "😠 You look upset. Want to talk about what's bothering you?",
+        Disgust: "😖 Not feeling good? I'm here if you want to share.",
+        Fear: "😨 You seem anxious. Do you want to talk about what's scaring you?",
+        Happy: "😊 You look happy! I'm glad to see that!",
+        Sad: "😢 You seem a bit down. Want to tell me why you're sad?",
+        Surprise: "😲 Something surprised you? Tell me more!",
+        Neutral: "😐 Just chilling? I'm here if you need anything."
+      };
+
+      const message = responses[emotion] || `You seem to be feeling: ${emotion}`;
+      appendMessage(message, 'bot');
+    })
+    .catch(err => {
+      console.error('Emotion detection failed', err);
+      appendMessage('❌ Error detecting emotion. Please try again.', 'bot');
+    });
+}
+
+
+function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const message = input.value.trim();
+  if (message === '') return;
+  appendMessage(message, 'user');
+
+  setTimeout(() => {
+    appendMessage("Thanks for sharing! 😊", 'bot');
+  }, 500);
+
+  input.value = '';
+}
+
+function appendMessage(text, sender) {
+  const msgDiv = document.createElement('div');
+  msgDiv.className = `message ${sender}`;
+  msgDiv.textContent = text;
+  document.getElementById('chatBox').appendChild(msgDiv);
+  msgDiv.scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
